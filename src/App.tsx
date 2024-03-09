@@ -37,6 +37,11 @@ const calculateGraph = (timestamps: number[]) => {
   return points;
 }
 
+const calcHash = async (ab: ArrayBuffer) => {
+  const hashBuffer = await crypto.subtle.digest('SHA-256', ab);
+  return [...new Uint8Array(hashBuffer)].map(o => o.toString(16).padStart(2, "0")).join("");
+}
+
 const App: Component = () => {
   const [deviceFolder, setDeviceFolder] = createSignal<FileSystemDirectoryHandle | undefined>()
   const [running, setRunning] = createSignal(false);
@@ -79,8 +84,7 @@ const App: Component = () => {
                 crypto.getRandomValues(currentBuffer.subarray(i, i + 65536));
               }
 
-              const hashBuffer = await crypto.subtle.digest('SHA-256', currentBuffer);
-              const hashStr = [...new Uint8Array(hashBuffer)].map(o => o.toString(16).padStart(2, "0")).join("");
+              const hashStr = await calcHash(currentBuffer);
 
               const file = await folder?.getFileHandle(`${hashStr}.dat`, { create: true });
               const stream = await file!.createWritable({ keepExistingData: false });
@@ -96,12 +100,53 @@ const App: Component = () => {
             }
           }
           catch (ex) {
+            // DOMException: The operation failed because it would cause the application to exceed its storage quota.
+            // => 0 KB file is left
             console.log(ex);
           }
 
           setRunning(false);
         }
       }>Write</Button>
+
+      <Button variant='contained'
+        onclick={async () => {
+          setRunning(true);
+
+          let totalSize = 0;
+
+          const folder = await deviceFolder()?.getDirectoryHandle("usb-stick-tester", { create: true });
+          console.log(folder);
+
+          setTimestamps([performance.now()]);
+
+          for await (const fileHandle of folder!.values() as FileSystemFileHandle[]) {
+            if (!running()) {
+              return;
+            }
+
+            if (fileHandle.kind === "file") {
+              setTimestamps(o => [...o, performance.now()]);
+
+              const file = await fileHandle.getFile();
+              const ab = await file.arrayBuffer();
+              const hashStr = await calcHash(ab);
+
+              if (file.name !== `${hashStr}.dat`) {
+                throw new Error(`Checksum mismatch ${file.name} vs ${hashStr}.dat`);
+              }
+
+              totalSize += ab.byteLength;
+
+            }
+          }
+
+          console.log(`Checked size: ${totalSize}`)
+
+          setRunning(false);
+        }}>
+        Check
+      </Button>
 
       <Button variant='contained' disabled={!running()} onclick={
         () => {
