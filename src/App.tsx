@@ -178,7 +178,8 @@ const App: Component = () => {
         <polyline points={calculateGraph(timestamps()).join(',')} fill="none" stroke="black"></polyline>
       </svg>
 
-      <div></div>
+      <div>{progressMessage()}</div>
+      <div style={{ color: "red" }}>{errorMessage()}</div>
     </div>
   );
 };
