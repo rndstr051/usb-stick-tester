@@ -45,7 +45,9 @@ const calcHash = async (ab: ArrayBuffer) => {
 const App: Component = () => {
   const [deviceFolder, setDeviceFolder] = createSignal<FileSystemDirectoryHandle | undefined>()
   const [running, setRunning] = createSignal(false);
-  const [timestamps, setTimestamps] = createSignal<number[]>([])
+  const [timestamps, setTimestamps] = createSignal<number[]>([]);
+  const [progressMessage, setProgressMessage] = createSignal("");
+  const [errorMessage, setErrorMessage] = createSignal("");
 
   return (
     <div class={styles.App}>
@@ -61,6 +63,10 @@ const App: Component = () => {
       <Button variant='contained' onClick={
         async () => {
           setRunning(true);
+          let totalSize = 0;
+          const startTime = performance.now();
+          setProgressMessage("");
+          setErrorMessage("");
 
           const folder = await deviceFolder()?.getDirectoryHandle("usb-stick-tester", { create: true });
           console.log(folder)
@@ -76,7 +82,12 @@ const App: Component = () => {
 
           try {
             while (running()) {
-              await closePromise[0];
+              if (closePromise[0] !== undefined) {
+                await closePromise[0];
+                totalSize += buffers[0].byteLength;
+
+                setProgressMessage(`Bytes written: ${totalSize}; Elapsed time: ${(performance.now() - startTime) / 1000} s`)
+              }
               setTimestamps(o => [...o, performance.now()]);
 
               const currentBuffer = buffers[0];
@@ -102,6 +113,7 @@ const App: Component = () => {
           catch (ex) {
             // DOMException: The operation failed because it would cause the application to exceed its storage quota.
             // => 0 KB file is left
+            setErrorMessage(ex.toString());
             console.log(ex);
           }
 
@@ -112,36 +124,44 @@ const App: Component = () => {
       <Button variant='contained'
         onclick={async () => {
           setRunning(true);
-
           let totalSize = 0;
+          const startTime = performance.now();
+          setProgressMessage("");
+          setErrorMessage("");
 
           const folder = await deviceFolder()?.getDirectoryHandle("usb-stick-tester", { create: true });
           console.log(folder);
 
           setTimestamps([performance.now()]);
 
-          for await (const fileHandle of folder!.values() as FileSystemFileHandle[]) {
-            if (!running()) {
-              return;
-            }
-
-            if (fileHandle.kind === "file") {
-              setTimestamps(o => [...o, performance.now()]);
-
-              const file = await fileHandle.getFile();
-              const ab = await file.arrayBuffer();
-              const hashStr = await calcHash(ab);
-
-              if (file.name !== `${hashStr}.dat`) {
-                throw new Error(`Checksum mismatch ${file.name} vs ${hashStr}.dat`);
+          try {
+            for await (const fileHandle of folder!.values() as FileSystemFileHandle[]) {
+              if (!running()) {
+                return;
               }
 
-              totalSize += ab.byteLength;
+              if (fileHandle.kind === "file") {
+                setTimestamps(o => [...o, performance.now()]);
 
+                const file = await fileHandle.getFile();
+                const ab = await file.arrayBuffer();
+                const hashStr = await calcHash(ab);
+
+                if (file.name !== `${hashStr}.dat`) {
+                  throw new Error(`Checksum mismatch ${file.name} vs ${hashStr}.dat`);
+                }
+
+                totalSize += ab.byteLength;
+                setProgressMessage(`Bytes checked: ${totalSize}; Elapsed time: ${(performance.now() - startTime) / 1000} s`)
+
+              }
             }
-          }
 
-          console.log(`Checked size: ${totalSize}`)
+            console.log(`Checked size: ${totalSize}`)
+          }
+          catch (ex) {
+            setErrorMessage(ex.toString());
+          }
 
           setRunning(false);
         }}>
@@ -157,6 +177,8 @@ const App: Component = () => {
       <svg width={1000} height={300} style={{ background: "#f0f0f0" }}>
         <polyline points={calculateGraph(timestamps()).join(',')} fill="none" stroke="black"></polyline>
       </svg>
+
+      <div></div>
     </div>
   );
 };
