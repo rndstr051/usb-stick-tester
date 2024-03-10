@@ -53,6 +53,7 @@ const App: Component = () => {
     <div class={styles.App}>
       <Button
         variant='contained'
+        disabled={running()}
         onClick={async () => {
           setDeviceFolder(await window.showDirectoryPicker({ id: "usb-stick-tester", mode: "readwrite", startIn: "downloads" }));
           console.log(deviceFolder())
@@ -60,68 +61,71 @@ const App: Component = () => {
       >Open device</Button>
       <div>Current device: {deviceFolder()?.name}</div>
 
-      <Button variant='contained' onClick={
-        async () => {
-          setRunning(true);
-          let totalSize = 0;
-          const startTime = performance.now();
-          setProgressMessage("");
-          setErrorMessage("");
+      <Button variant='contained'
+        disabled={running() || deviceFolder === undefined}
+        onClick={
+          async () => {
+            setRunning(true);
+            let totalSize = 0;
+            const startTime = performance.now();
+            setProgressMessage("");
+            setErrorMessage("");
 
-          const folder = await deviceFolder()?.getDirectoryHandle("usb-stick-tester", { create: true });
-          console.log(folder)
+            const folder = await deviceFolder()?.getDirectoryHandle("usb-stick-tester", { create: true });
+            console.log(folder)
 
-          let buffers: Uint8Array[] = new Array(4);
-          let closePromise: (Promise<void> | undefined)[] = new Array(4);
+            let buffers: Uint8Array[] = new Array(4);
+            let closePromise: (Promise<void> | undefined)[] = new Array(4);
 
-          for (let i = 0; i < buffers.length; i += 1) {
-            buffers[i] = new Uint8Array(128 * 1024 * 1024);
-          }
-
-          setTimestamps([performance.now()]);
-
-          try {
-            while (running()) {
-              if (closePromise[0] !== undefined) {
-                await closePromise[0];
-                totalSize += buffers[0].byteLength;
-
-                setProgressMessage(`Bytes written: ${totalSize}; Elapsed time: ${(performance.now() - startTime) / 1000} s`)
-              }
-              setTimestamps(o => [...o, performance.now()]);
-
-              const currentBuffer = buffers[0];
-              for (let i = 0; i < currentBuffer.length; i += 65536) {
-                crypto.getRandomValues(currentBuffer.subarray(i, i + 65536));
-              }
-
-              const hashStr = await calcHash(currentBuffer);
-
-              const file = await folder?.getFileHandle(`${hashStr}.dat`, { create: true });
-              const stream = await file!.createWritable({ keepExistingData: false });
-              await stream.write(currentBuffer);
-
-              closePromise[0] = stream.close();
-
-              buffers.push(buffers.shift()!);
-              closePromise.push(closePromise.shift());
-
-              // [currentBuffer, backBuffer] = [backBuffer, currentBuffer];
-
+            for (let i = 0; i < buffers.length; i += 1) {
+              buffers[i] = new Uint8Array(128 * 1024 * 1024);
             }
-          }
-          catch (ex) {
-            // DOMException: The operation failed because it would cause the application to exceed its storage quota.
-            // => 0 KB file is left
-            setErrorMessage(ex.toString());
-            console.log(ex);
-          }
 
-          setRunning(false);
-        }
-      }>Write</Button>
+            setTimestamps([performance.now()]);
+
+            try {
+              while (running()) {
+                if (closePromise[0] !== undefined) {
+                  await closePromise[0];
+                  totalSize += buffers[0].byteLength;
+
+                  setProgressMessage(`Bytes written: ${totalSize}; Elapsed time: ${(performance.now() - startTime) / 1000} s`)
+                }
+                setTimestamps(o => [...o, performance.now()]);
+
+                const currentBuffer = buffers[0];
+                for (let i = 0; i < currentBuffer.length; i += 65536) {
+                  crypto.getRandomValues(currentBuffer.subarray(i, i + 65536));
+                }
+
+                const hashStr = await calcHash(currentBuffer);
+
+                const file = await folder?.getFileHandle(`${hashStr}.dat`, { create: true });
+                const stream = await file!.createWritable({ keepExistingData: false });
+                await stream.write(currentBuffer);
+
+                closePromise[0] = stream.close();
+
+                buffers.push(buffers.shift()!);
+                closePromise.push(closePromise.shift());
+
+                // [currentBuffer, backBuffer] = [backBuffer, currentBuffer];
+
+              }
+            }
+            catch (ex) {
+              // DOMException: The operation failed because it would cause the application to exceed its storage quota.
+              // => 0 KB file is left
+              setErrorMessage(ex.toString());
+              console.log(ex);
+            }
+
+            setRunning(false);
+          }
+        }>Write</Button>
 
       <Button variant='contained'
+        disabled={running() || deviceFolder === undefined}
         onclick={async () => {
           setRunning(true);
           let totalSize = 0;
