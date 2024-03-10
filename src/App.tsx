@@ -62,7 +62,7 @@ const App: Component = () => {
       <div>Current device: {deviceFolder()?.name}</div>
 
       <Button variant='contained'
-        disabled={running() || deviceFolder === undefined}
+        disabled={running() || deviceFolder() === undefined}
         onClick={
           async () => {
             setRunning(true);
@@ -125,7 +125,7 @@ const App: Component = () => {
         }>Write</Button>
 
       <Button variant='contained'
-        disabled={running() || deviceFolder === undefined}
+        disabled={running() || deviceFolder() === undefined}
         onclick={async () => {
           setRunning(true);
           let totalSize = 0;
